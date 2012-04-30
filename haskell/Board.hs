@@ -25,10 +25,10 @@ mkBoard side = Board cells []
                cells = Map.fromList [((x, y), mkCellAt x y) | x <- [1..side], y <- [1..side]]
 
 -- TODO make it work with edges with balls
-showHorizontalEdge :: (Cell -> Bool) -> Cell -> Char
+showHorizontalEdge :: (Cell -> Bool) -> Cell -> String
 showHorizontalEdge edge cell = if edge cell
-                               then '—'
-                               else '⋯'
+                               then "———"
+                               else "∙∙∙"
 
 showTopEdges :: [Cell] -> String
 showTopEdges = showEdgesLine topEdge
@@ -36,28 +36,38 @@ showTopEdges = showEdgesLine topEdge
 showLastLine :: [Cell] -> String
 showLastLine = showEdgesLine bottomEdge
 
-showEdgesLine :: (Cell -> Bool) -> [Cell] -> [Char]
+showEdgesLine :: (Cell -> Bool) -> [Cell] -> String
 showEdgesLine edge cells = margin ++ edges ++ margin
                          where
                            margin = " "
-                           edges = List.intersperse ' ' . map (showHorizontalEdge edge) $ cells
+                           edges = concat . List.intersperse " " . map (showHorizontalEdge edge) $ cells
 
 showVerticalEdge :: (Cell -> Bool) -> Cell -> Char
 showVerticalEdge edge cell = if edge cell
-                             then '|'
-                             else '¦'
+                             then '│'
+                             else ':'
 
 showFirstEdgeOfLine :: [Cell] -> Char
 showFirstEdgeOfLine = showVerticalEdge leftEdge . head
 
 showCell :: Cell -> String
-showCell cell = ' ' : [showVerticalEdge rightEdge cell]
+showCell cell = "   " ++ [showVerticalEdge rightEdge cell]
+
+-- TODO make it show a ball in the cell
+showMiddleOfCell :: Cell -> String
+showMiddleOfCell cell = "   " ++ [showVerticalEdge rightEdge cell]
 
 showCells :: [Cell] -> String
-showCells cells = firstEdge : allButFirstEdge
+showCells = showCellsUsing showCell
+
+showMiddleOfCells :: [Cell] -> String
+showMiddleOfCells = showCellsUsing showMiddleOfCell
+
+showCellsUsing :: (Cell -> String) -> [Cell] -> String
+showCellsUsing showFunction cells = firstEdge : allButFirstEdge
                 where
                   firstEdge = showFirstEdgeOfLine cells
-                  allButFirstEdge = foldr (++) "" $ map showCell cells
+                  allButFirstEdge = foldr (++) "" $ map showFunction cells
 
 boardLines :: Board -> [[Cell]]
 boardLines (Board cellMap _) =
@@ -76,12 +86,12 @@ instance Show Board where
     show board =
         let
             lines = boardLines board
-            showLine line = showTopEdges line ++ "\n" ++ showCells line
+            showLine line = showTopEdges line ++ "\n" ++ showCells line ++ "\n" ++ showMiddleOfCells line ++ "\n" ++ showCells line
             allButLastLine = unlines $ map showLine lines
         in
             allButLastLine ++ showLastLine (last lines)
 
--- char to show open vertical edge ¦
--- char to show closed vertical edge |
--- char to show open horizontal edge ⋯
+-- char to show open vertical edge :
+-- char to show closed vertical edge │
+-- char to show open horizontal edge ∙
 -- char to show closed horizontal edge —
