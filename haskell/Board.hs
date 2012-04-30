@@ -1,95 +1,66 @@
 module Board where
 
 import qualified Data.Map as Map
-import qualified Data.List as List (intersperse, sortBy, groupBy)
+import qualified Data.List as List (groupBy, intersperse)
+import Data.Function (on)
 
 type Position = (Int, Int)
 
-data BallPosition = MidCell Position
-                  | OverEdge Position Position
+data BoardElement = Cell Position
+                  | Edge Position
+                  | Crossing Position
 
-data Ball = Ball BallPosition
+data Ball = Ball Position
 
-data Cell = Cell { leftEdge :: Bool
-                 , rightEdge :: Bool
-                 , topEdge :: Bool
-                 , bottomEdge :: Bool
-                 }
+data Board = Board (Map.Map Position BoardElement) [Ball]
 
-data Board = Board (Map.Map Position Cell) [Ball]
+getPosition :: BoardElement -> Position
+getPosition (Cell p) = p
+getPosition (Edge p) = p
+getPosition (Crossing p) = p
 
-mkBoard :: Int -> Board
-mkBoard side = Board cells []
-             where
-               mkCellAt x y = Cell (x == 1) (x == side) (y == 1) (y == side)
-               cells = Map.fromList [((x, y), mkCellAt x y) | x <- [1..side], y <- [1..side]]
-
--- TODO make it work with edges with balls
-showHorizontalEdge :: (Cell -> Bool) -> Cell -> String
-showHorizontalEdge edge cell = if edge cell
-                               then "———"
-                               else "∙∙∙"
-
-showTopEdges :: [Cell] -> String
-showTopEdges = showEdgesLine topEdge
-
-showLastLine :: [Cell] -> String
-showLastLine = showEdgesLine bottomEdge
-
-showEdgesLine :: (Cell -> Bool) -> [Cell] -> String
-showEdgesLine edge cells = margin ++ edges ++ margin
-                         where
-                           margin = " "
-                           edges = concat . List.intersperse " " . map (showHorizontalEdge edge) $ cells
-
-showVerticalEdge :: (Cell -> Bool) -> Cell -> Char
-showVerticalEdge edge cell = if edge cell
-                             then '│'
-                             else ':'
-
-showFirstEdgeOfLine :: [Cell] -> Char
-showFirstEdgeOfLine = showVerticalEdge leftEdge . head
-
-showCell :: Cell -> String
-showCell cell = "   " ++ [showVerticalEdge rightEdge cell]
-
--- TODO make it show a ball in the cell
-showMiddleOfCell :: Cell -> String
-showMiddleOfCell cell = "   " ++ [showVerticalEdge rightEdge cell]
-
-showCells :: [Cell] -> String
-showCells = showCellsUsing showCell
-
-showMiddleOfCells :: [Cell] -> String
-showMiddleOfCells = showCellsUsing showMiddleOfCell
-
-showCellsUsing :: (Cell -> String) -> [Cell] -> String
-showCellsUsing showFunction cells = firstEdge : allButFirstEdge
-                where
-                  firstEdge = showFirstEdgeOfLine cells
-                  allButFirstEdge = foldr (++) "" $ map showFunction cells
-
-boardLines :: Board -> [[Cell]]
-boardLines (Board cellMap _) =
-    let
-        keys = Map.keys cellMap
-        sortBySnd pairA pairB = if snd pairA == snd pairB
-                                then fst pairA `compare` fst pairB
-                                else snd pairA `compare` snd pairB
-        keysByLine = List.groupBy (\a b -> snd a == snd b) $ List.sortBy sortBySnd keys
-        unwrapMaybeCell (Just cell) = cell
-        mapBack = unwrapMaybeCell . (flip Map.lookup) cellMap -- guaranteed because we are iterating on the keys
-    in
-        map (map mapBack) keysByLine
+instance Show BoardElement where
+    show (Cell _) = " "
+    show (Edge (x, y)) = if x `mod` 2 == 0
+                              then "—"
+                              else "│"
+    show (Crossing (0, 0)) = "┌"
+    show (Crossing (0, _)) = "┬"
+    show (Crossing (_, 0)) = "├"
+    show (Crossing _) = "┼"
 
 instance Show Board where
-    show board =
-        let
-            lines = boardLines board
-            showLine line = showTopEdges line ++ "\n" ++ showCells line ++ "\n" ++ showMiddleOfCells line ++ "\n" ++ showCells line
-            allButLastLine = unlines $ map showLine lines
-        in
-            allButLastLine ++ showLastLine (last lines)
+    show (Board elements _) = concat . concat . List.intersperse ["\n"] $ map (map show) elementsByLine
+                            where
+                              elementsWithPosition = Map.toList elements
+                              elementsByLineWithPosition = List.groupBy ((==) `on` fst . fst) elementsWithPosition
+                              elementsByLine = map (map snd) elementsByLineWithPosition
+
+merge :: [a] -> [a] -> [a]
+merge (x:xs) (y:ys) = x:y:(merge xs ys)
+merge (x:xs) [] = [x]
+
+mkOuterElement element lineNumber length = [element (lineNumber, x) | x <- [0,2..length]]
+
+mkInnerElement element lineNumber length = [element (lineNumber, x) | x <- [1,3..length]]
+
+mkLine :: Int -> Int -> [BoardElement]
+mkLine lineNumber length = merge (mkOuterElement outerElement lineNumber length) (mkInnerElement innerElement lineNumber length)
+                         where
+                           (outerElement, innerElement) = if lineNumber `mod` 2 == 0
+                                                          then (Crossing, Edge)
+                                                          else (Edge, Cell)
+
+mkBoard :: Int -> Board
+mkBoard side = Board elements []
+             where
+               elementLines = [mkLine lineNumber (2 * side) | lineNumber <- [0..2*side]]
+               allElements = concat elementLines
+               elementsWithPosition = map (\x -> (getPosition x, x)) allElements
+               elements = Map.fromList elementsWithPosition
+
+addBall :: Board -> Ball -> Board
+addBall (Board cells balls) ball = Board cells (ball:balls)
 
 -- char to show open vertical edge :
 -- char to show closed vertical edge │
